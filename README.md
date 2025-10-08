@@ -13,11 +13,6 @@ CodenameLib is a robust C# library for 2D pathfinding in Unity, implementing A* 
   - [Direct API: Using A* or Theta*](#direct-api-using-a-or-theta)
   - [Quick Start: ThetaStarAgent](#quick-start-thetastaragent)
 - [API Reference](#api-reference)
-- [Visualization](#visualization)
-- [Extending](#extending)
-- [Contributing](#contributing)
-- [License](#license)
-- [Contact & Support](#contact--support)
 
 ---
 
@@ -185,37 +180,4 @@ public class ThetaMovement : MonoBehaviour
 
 ---
 
-## Visualization
 
-Enable **Draw Gizmos** in agent scripts to visualize path lines and waypoints in the Unity Editor. Colors indicate:
-
-- Green: Path lines.
-- Blue: Path nodes.
-- Red: Current target node.
-
----
-
-## Extending
-
-CodenameLib is designed for easy extension:
-- Add new pathfinding algorithms by following the structure of `AStarPathfinder2D` or `ThetaStarPathfinder`.
-- Integrate with custom movement or animation systems via agent events.
-- Modify cost or heuristic functions for custom movement logic.
-
----
-
-## Contributing
-
-Contributions are welcome! Please fork the repository and submit a pull request. For larger changes, open an issue to discuss first.
-
----
-
-## License
-
-This project is licensed under the MIT License. See the [repository](https://github.com/taiix/CodenameLib) for details.
-
----
-
-## Contact & Support
-
-For questions or support, open an issue on [GitHub](https://github.com/taiix/CodenameLib/issues).
