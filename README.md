@@ -1,134 +1,221 @@
 # CodenameLib
 
-CodenameLib is a C# library focused on providing 2D pathfinding solutions using the A* and Theta* algorithms, designed for Unity projects that use grid-based movement and tilemaps. This guide explains the main features and usage patterns for normal users who want to integrate efficient pathfinding into their games or applications.
+CodenameLib is a robust C# library for 2D pathfinding in Unity, implementing A* and Theta* algorithms for grid-based navigation with tilemap obstacles. It is designed for easy integration via Unity Package Manager and offers agent scripts, direct API access, and path visualization.
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Usage](#usage)
+  - [Quick Start: PathfindingAgent2D](#quick-start-pathfindingagent2d)
+  - [Direct API: Using A* or Theta*](#direct-api-using-a-or-theta)
+  - [Quick Start: ThetaStarAgent](#quick-start-thetastaragent)
+- [API Reference](#api-reference)
+- [Visualization](#visualization)
+- [Extending](#extending)
+- [Contributing](#contributing)
+- [License](#license)
+- [Contact & Support](#contact--support)
+
+---
 
 ## Features
 
-- **A* and Theta* Pathfinding Algorithms**: Find optimal paths on grid-based maps with support for obstacles.
-- **Unity Integration**: Built to work seamlessly with Unity's `Grid` and `Tilemap` systems.
-- **Pathfinding Agents**: Ready-made MonoBehaviour agents to move characters along calculated paths.
-- **Customizable Movement and Visualization**: Control movement speed, path-following behavior, and path visualization with Gizmos.
+- **A* and Theta* Algorithms**: Fast, optimal pathfinding for 2D tilemaps.
+- **Unity Integration**: Works directly with `Grid` and `Tilemap` components.
+- **Ready-to-Use Agents**: MonoBehaviour scripts for moving objects along paths.
+- **Customizable Movement**: Control speed, waypoints, and agent behavior.
+- **Path Visualization**: Gizmo-based rendering of paths and waypoints in the Editor.
+- **Event Hooks**: Subscribe to agent events for animation or logic triggers.
+
+---
 
 ## Installation
 
-1. Clone or download the repository:  
-   [taiix/CodenameLib](https://github.com/taiix/CodenameLib)
-2. Copy the `Runtime/Pathfinding` folder into your Unity project's Assets directory.
-3. Ensure you have references to UnityEngine, UnityEngine.Tilemaps, and UnityEngine.Grid in your project.
+CodenameLib is distributed via Unity Package Manager.
 
-## Getting Started
+### 1. Add the Package to Unity
 
-### Example: Using the PathfindingAgent2D
+1. Open Unity and your project.
+2. Go to `Window > Package Manager`.
+3. Click the "+" button and select "Add package from Git URL..."
+4. Enter the following URL:
 
-Attach the `PathfindingAgent2D` script to your player or NPC GameObject. Set up references in the Unity Inspector:
+   ```
+   https://github.com/taiix/CodenameLib.git
+   ```
+
+5. Click "Add". The package will be installed and available in your project.
+
+**Note:** You may need to enable "Show preview packages" in Package Manager settings if the package is not visible.
+
+### 2. Requirements
+
+- Unity 2021+ (recommended)
+- Uses Unity's built-in `Grid` and `Tilemap` systems.
+
+---
+
+## Usage
+
+### Quick Start: PathfindingAgent2D
+
+Attach `PathfindingAgent2D` to your player or NPC GameObject and configure these fields in the Inspector:
+
+- `grid`: Reference to your scene's Grid object.
+- `obstacleTilemaps`: Array of Tilemaps marking obstacles.
+- `movementSpeed`, `reachedNodeDistance`, `drawGizmos`: Tweak for behavior and visualization.
+- `Player`: The transform to move.
+- `Target`: The transform to reach.
+
+**Sample Script:**
 
 ```csharp
 using CodenameLib.Pathfinding;
 
-public class MyMovementController : MonoBehaviour
+public class MovementStarter : MonoBehaviour
 {
     public PathfindingAgent2D agent;
-    public Transform target;
+    public Transform destination;
 
     void Start()
     {
-        agent.MoveTo(target.position);
+        agent.MoveTo(destination.position);
     }
 }
 ```
 
-The `PathfindingAgent2D` will use A* to find a path from its position to the target, avoiding obstacles set in the provided Tilemaps.
+### Direct API: Using A* or Theta*
 
-**Inspector Setup:**
-- **Grid**: Reference to your scene's Grid object.
-- **Obstacle Tilemaps**: Array of Tilemaps marking impassable tiles.
-- **Movement Speed**: How fast the agent moves.
-- **Reached Node Distance**: How close the agent must get to a waypoint before moving to the next.
-- **Draw Gizmos**: Enable to visualize the calculated path in the Editor.
+You can use the core pathfinding classes directly, without agents.
 
-### Example: Direct Use of A* or Theta* Finder
-
-Use the static methods to calculate paths without agents:
+**A\* Example:**
 
 ```csharp
 using CodenameLib.Pathfinding;
 
-// Using A* pathfinding
 PathfindingResult result = AStarPathfinder2D.FindPath(
-    startWorldPos, targetWorldPos, grid, obstacleTilemaps);
+    player.transform.position,
+    target.transform.position,
+    grid,
+    obstacleTilemaps
+);
 
 if (result.success)
 {
     foreach (Vector3 waypoint in result.Path)
-    {
-        // Move your object or visualize the path
-    }
+        Debug.Log(waypoint);
 }
 else
 {
-    Debug.LogError("Pathfinding failed: " + result.ErrorMessage);
+    Debug.LogError(result.ErrorMessage);
 }
-
-// Using Theta* pathfinding
-PathfindingResult thetaResult = ThetaStarPathfinder.FindPath2D(
-    startWorldPos, targetWorldPos, grid, obstacleTilemaps);
 ```
 
-### Example: Using ThetaStarAgent
+**Theta\* Example:**
 
-Attach `ThetaStarAgent` to a GameObject for advanced pathfinding. You can subscribe to path events:
+```csharp
+PathfindingResult result = ThetaStarPathfinder.FindPath2D(
+    player.transform.position,
+    target.transform.position,
+    grid,
+    obstacleTilemaps
+);
+```
+
+### Quick Start: ThetaStarAgent
+
+Attach `ThetaStarAgent` to a GameObject for advanced pathfinding and subscribe to events as needed:
 
 ```csharp
 using CodenameLib.Pathfinding;
 
-public class MyThetaController : MonoBehaviour
+public class ThetaMovement : MonoBehaviour
 {
     public ThetaStarAgent agent;
-    public Transform target;
+    public Transform goal;
 
     void Start()
     {
-        agent.OnPathComplete += HandlePathComplete;
-        agent.MoveTo(target.position);
+        agent.OnPathComplete += OnPathFinished;
+        agent.MoveTo(goal.position);
     }
 
-    void HandlePathComplete(PathfindingResult result)
+    void OnPathFinished(PathfindingResult result)
     {
         if (result.success)
             Debug.Log("Path found!");
         else
-            Debug.LogWarning("Pathfinding failed: " + result.ErrorMessage);
+            Debug.LogWarning(result.ErrorMessage);
     }
 }
 ```
 
+---
+
 ## API Reference
 
-### `AStarPathfinder2D`
+### AStarPathfinder2D
+
 - `PathfindingResult FindPath(Vector3 startWorldPos, Vector3 targetWorldPos, Grid grid, Tilemap[] obstacleTilemaps)`
+  - Finds a path from start to target, avoiding obstacles.
 
-### `ThetaStarPathfinder`
+### ThetaStarPathfinder
+
 - `PathfindingResult FindPath2D(Vector3 startWorldPos, Vector3 targetWorldPos, Grid grid, Tilemap[] obstacleTilemaps)`
+  - Uses Theta* for smoother, more direct paths.
 
-### `PathfindingAgent2D` & `ThetaStarAgent`
-- `void MoveTo(Vector3 targetPosition)`
-- `void CalculatePathOnly(Vector3 targetPosition)` (ThetaStarAgent only)
+### Pathfinding Agents
 
-### `PathfindingResult`
-- `bool success` — true if a valid path was found
-- `List<Vector3> Path` — list of world positions along the path
-- `string ErrorMessage` — error details if pathfinding failed
+- **PathfindingAgent2D** (A*)
+  - `void MoveTo(Vector3 targetPosition)` – Moves the assigned player to the given position.
+- **ThetaStarAgent** (Theta*)
+  - `void MoveTo(Vector3 targetPosition)`
+  - `void CalculatePathOnly(Vector3 targetPosition)` – Calculates path, does not move.
+  - `event Action<PathfindingResult> OnPathComplete` – Subscribe to get results.
+  - `event Action OnMovementStart`, `event Action OnMovementComplete` – Subscribe for movement events.
+
+### PathfindingResult
+
+- `bool success` – True if a path was found.
+- `List<Vector3> Path` – World positions for each waypoint.
+- `string ErrorMessage` – Details when failing.
+
+---
 
 ## Visualization
 
-Enable "Draw Gizmos" in the agent scripts to visualize paths and nodes in the Unity Editor.
+Enable **Draw Gizmos** in agent scripts to visualize path lines and waypoints in the Unity Editor. Colors indicate:
+
+- Green: Path lines.
+- Blue: Path nodes.
+- Red: Current target node.
+
+---
+
+## Extending
+
+CodenameLib is designed for easy extension:
+- Add new pathfinding algorithms by following the structure of `AStarPathfinder2D` or `ThetaStarPathfinder`.
+- Integrate with custom movement or animation systems via agent events.
+- Modify cost or heuristic functions for custom movement logic.
+
+---
 
 ## Contributing
 
-Feel free to open issues or pull requests for improvements or bug fixes.
+Contributions are welcome! Please fork the repository and submit a pull request. For larger changes, open an issue to discuss first.
+
+---
 
 ## License
 
-Please see the repository for license details.
+This project is licensed under the MIT License. See the [repository](https://github.com/taiix/CodenameLib) for details.
 
-```
+---
+
+## Contact & Support
+
+For questions or support, open an issue on [GitHub](https://github.com/taiix/CodenameLib/issues).
