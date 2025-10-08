@@ -1,0 +1,10 @@
+{
+  "name": "com.codenamedev.codenamelib",
+  "displayName": "Codename Library",
+  "version": "1.0.0",
+  "description": "A reusable A* pathfinding and utility library for Unity",
+  "author": {
+    "name": "Stan",
+    "email": "taix97@outlook.com"
+  }
+}
