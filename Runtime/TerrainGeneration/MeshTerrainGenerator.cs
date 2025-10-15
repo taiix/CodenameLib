@@ -7,11 +7,13 @@ namespace CodenameLib.ProceduralTerrain
         private static ComputeShader _computeShader;
         private static Texture2D _chunkTexture;
 
+        //Called once the first time the class is called
         static MeshTerrainGenerator()
         {
             LoadComputeShader();
         }
-
+        
+        //Load the compute shader
         private static void LoadComputeShader()
         {
             _computeShader = Resources.Load<ComputeShader>("ComputeShaders/TerrainCompute");
@@ -21,7 +23,7 @@ namespace CodenameLib.ProceduralTerrain
             else
                 Debug.Log("[TerrainGen] ✅ Compute shader loaded successfully.");
         }
-
+        
         public static MeshTerrainResult GenerateMeshTerrain(TerrainSettings settings)
         {
             try
@@ -53,6 +55,7 @@ namespace CodenameLib.ProceduralTerrain
             }
         }
 
+        //Create the actual mesh based on the heightmap from the compute shader
         private static Mesh CreateMeshFromHeightmap(float[,] heightmap, TerrainSettings settings)
         {
             int width = TerrainSettings.mapChunkSize;
