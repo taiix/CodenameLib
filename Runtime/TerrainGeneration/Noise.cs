@@ -17,6 +17,7 @@ namespace CodenameLib.ProceduralTerrain
             Debug.Log("Compute Shader loaded successfully.");
         }
 
+        
         public static float[,] GenerateNoiseMap(TerrainSettings settings)
         {
             int size = TerrainSettings.mapChunkSize;
@@ -83,6 +84,7 @@ namespace CodenameLib.ProceduralTerrain
             return noiseMap;
         }
 
+        //Generates a noise map texture aka perlin noise material
         public static Material DrawNoiseMap(float[,] noiseMap)
         {
             int width = noiseMap.GetLength(0);
@@ -104,6 +106,7 @@ namespace CodenameLib.ProceduralTerrain
             return material;
         }
 
+        //Applies colors based on the terrain heights from noisemap
         public static Texture2D DrawColorMap(float[,] noiseMap, TerrainSettings data)
         {
             int width = noiseMap.GetLength(0);
