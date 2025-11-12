@@ -41,12 +41,16 @@ namespace CodenameLib.ProceduralTerrain
             computeShader.SetInt("seed", settings.seed);
 
             computeShader.SetBuffer(kernelHandle, "perlinData", noiseBuffer);
-            computeShader.Dispatch(kernelHandle, size / 8, size / 8, 1);
+
+            int threadGroupsX = Mathf.CeilToInt(size / 8.0f);
+            int threadGroupsY = Mathf.CeilToInt(size / 8.0f);
+            computeShader.Dispatch(kernelHandle, threadGroupsX, threadGroupsY, 1);
 
             float[] noiseArray = new float[size * size];
             noiseBuffer.GetData(noiseArray);
 
             noiseBuffer.Release();
+            Object.DestroyImmediate(computeShader);
             
             float min = float.MaxValue;
             float max = float.MinValue;

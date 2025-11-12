@@ -2,96 +2,106 @@
 #pragma kernel SmoothingWholeTerrain
 #pragma kernel SmoothingCustomArea
 
-inline float unity_noise_randomValue(float2 uv)
+// Improved noise functions without integer boundary issues
+float hash(float2 p)
 {
-    return frac(sin(dot(uv, float2(12.9898, 78.233))) * 43758.5453);
+    return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
 }
 
-inline float unity_noise_interpolate(float a, float b, float t)
-{
-    return (1.0 - t) * a + (t * b);
-}
-
-inline float unity_valueNoise(float2 uv)
+float improved_valueNoise(float2 uv)
 {
     float2 i = floor(uv);
     float2 f = frac(uv);
-    f = f * f * (3.0 - 2.0 * f);
-
-    float2 c0 = i + float2(0.0, 0.0);
-    float2 c1 = i + float2(1.0, 0.0);
-    float2 c2 = i + float2(0.0, 1.0);
-    float2 c3 = i + float2(1.0, 1.0);
-
-    float r0 = unity_noise_randomValue(c0);
-    float r1 = unity_noise_randomValue(c1);
-    float r2 = unity_noise_randomValue(c2);
-    float r3 = unity_noise_randomValue(c3);
-
-    float bottomOfGrid = unity_noise_interpolate(r0, r1, f.x);
-    float topOfGrid = unity_noise_interpolate(r2, r3, f.x);
-    return unity_noise_interpolate(bottomOfGrid, topOfGrid, f.y);
+    
+    // Smoother interpolation
+    float2 u = f * f * (3.0 - 2.0 * f);
+    
+    // Use improved corner sampling
+    float a = hash(i + float2(0.0, 0.0));
+    float b = hash(i + float2(1.0, 0.0));
+    float c = hash(i + float2(0.0, 1.0));
+    float d = hash(i + float2(1.0, 1.0));
+    
+    return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
 }
 
-float Unity_SimpleNoise_float(float2 UV, float Scale, int octaves, float persistence, float lacunarity, float2 offset,
-                              int seed)
+float ImprovedNoise(float2 UV, float Scale, int octaves, float persistence, float lacunarity, float2 offset, int seed)
 {
-    float2 seedV = float2(seed, seed);
-    float amplitude = 1;
-    float frequency = 1;
-    float noiseHeight = 0;
-    float max = 0;
+    float2 seedOffset = float2(seed * 0.001, seed * 0.0015);
+    float2 p = UV * Scale + offset + seedOffset;
+    
+    float value = 0.0;
+    float amplitude = 1.0;
+    float frequency = 1.0;
+    float maxValue = 0.0;
+    
     for (int i = 0; i < octaves; i++)
     {
-        float2 uvOffset = (UV * 2) * Scale * frequency + offset + seedV;
-        noiseHeight += unity_valueNoise(uvOffset) * amplitude;
-        max += amplitude;
+        if (i >= 8)
+            break;
+        
+        float n = improved_valueNoise(p * frequency);
+        value += n * amplitude;
+        maxValue += amplitude;
+        
         amplitude *= persistence;
         frequency *= lacunarity;
     }
-
-    return noiseHeight / max;
+    
+    if (maxValue > 0.0)
+        value /= maxValue;
+    
+    return value;
 }
 
-//Perlin noise///////////////////////////////////////////////////////
-RWStructuredBuffer<float> perlinData; // Store noise values as float
+// Perlin Noise Kernel
+RWStructuredBuffer<float> perlinData;
 
 float scale;
-
 int seed;
 int width;
 int height;
-
 int octaves;
 float persistence;
 float lacunarity;
 float2 offset;
-//////////////////////////////////////////////////////////////////////
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
-    float2 uv = id.xy / float2(width, height);
-    float noiseValue = Unity_SimpleNoise_float(uv, scale, octaves, persistence, lacunarity, offset.xy, seed);
+    if (id.x >= (uint) width || id.y >= (uint) height)
+        return;
 
+    // Improved UV calculation with jitter to break integer alignment
+    float2 uv = (id.xy + 0.5) / float2(width, height); // Sample at pixel centers
+    
+    // Add small random jitter based on pixel position and seed
+    float2 jitter = float2(
+        hash(float2(id.x + seed, id.y)),
+        hash(float2(id.x, id.y + seed))
+    ) * 0.005; // Very small jitter
+    
+    float noiseValue = ImprovedNoise(uv + jitter, scale, octaves, persistence, lacunarity, offset, seed);
+    
     perlinData[id.x + id.y * width] = noiseValue;
 }
 
-//Smoothing///////////////////////////////////////////////////////////////////////////////////////////////////////
+// Smoothing Kernels
 RWStructuredBuffer<float> smoothingData;
 RWStructuredBuffer<float> terrainHeightsData;
 int smoothRadius;
 
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-[numthreads(8,8,1)]
+[numthreads(8, 8, 1)]
 void SmoothingWholeTerrain(uint3 id : SV_DispatchThreadID)
 {
     int x = id.x;
     int y = id.y;
 
-    float avarageHeight = 0;
-    int validNeightbours = 0;
+    if (x >= width || y >= height)
+        return;
+
+    float averageHeight = 0;
+    int validNeighbors = 0;
 
     int index = x + y * width;
 
@@ -99,89 +109,90 @@ void SmoothingWholeTerrain(uint3 id : SV_DispatchThreadID)
     {
         for (int j_x = -smoothRadius; j_x <= smoothRadius; j_x++)
         {
-            int neightbourX = x + j_x;
-            int neightbourY = y + j_y;
+            int neighborX = x + j_x;
+            int neighborY = y + j_y;
 
-            if (neightbourX >= 0 && neightbourX < width - 1 && neightbourY >= 0 && neightbourY < height - 1)
+            if (neighborX >= 0 && neighborX < width && neighborY >= 0 && neighborY < height)
             {
-                int neightbourIndex = neightbourX + neightbourY * width;
-                avarageHeight += terrainHeightsData[neightbourIndex];
-                validNeightbours++;
+                int neighborIndex = neighborX + neighborY * width;
+                averageHeight += terrainHeightsData[neighborIndex];
+                validNeighbors++;
             }
         }
     }
 
-    smoothingData[index] = avarageHeight / validNeightbours;
+    if (validNeighbors > 0)
+        smoothingData[index] = averageHeight / validNeighbors;
+    else
+        smoothingData[index] = terrainHeightsData[index];
 }
 
-
-//Custom Area Smoothing///////////////////////////////////////////////////////////////////////////////////////////////////////
+// Custom Area Smoothing
 RWStructuredBuffer<float> customAreaData;
 
 int customAreaX;
 int customAreaZ;
-
-int interpolationNeightbours;
-
+int interpolationNeighbors;
 float innerRadius;
 float outerRadius;
 float targetHeight;
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-float GetAvarageHeightAroundArea(int x, int y)
+float GetAverageHeightAroundArea(int x, int y)
 {
-    /*
-     * we want to interpolate between the radius and influence radius
-     */
-    float avarageHeight = 0;
-    int validNeightbours = 0;
+    float averageHeight = 0;
+    int validNeighbors = 0;
 
-    for (int j_y = -interpolationNeightbours; j_y <= interpolationNeightbours; j_y++)
+    for (int j_y = -interpolationNeighbors; j_y <= interpolationNeighbors; j_y++)
     {
-        for (int j_x = -interpolationNeightbours; j_x <= interpolationNeightbours; j_x++)
+        for (int j_x = -interpolationNeighbors; j_x <= interpolationNeighbors; j_x++)
         {
-            int neightbourX = x + j_x;
-            int neightbourY = y + j_y;
+            int neighborX = x + j_x;
+            int neighborY = y + j_y;
 
-            if (neightbourX >= 0 && neightbourX < width - 1 && neightbourY >= 0 && neightbourY < height - 1)
+            if (neighborX >= 0 && neighborX < width && neighborY >= 0 && neighborY < height)
             {
-                int neightbourIndex = neightbourX + neightbourY * width;
-
-                avarageHeight += terrainHeightsData[neightbourIndex];
-                validNeightbours++;
+                int neighborIndex = neighborX + neighborY * width;
+                averageHeight += terrainHeightsData[neighborIndex];
+                validNeighbors++;
             }
         }
     }
 
-    return avarageHeight / validNeightbours;
+    if (validNeighbors > 0)
+        return averageHeight / validNeighbors;
+    else
+        return terrainHeightsData[x + y * width];
 }
 
-[numthreads(8,8,1)]
+[numthreads(8, 8, 1)]
 void SmoothingCustomArea(uint3 id : SV_DispatchThreadID)
 {
     int x = id.x;
     int y = id.y;
-    int index = x + y * width;
+    
+    if (x >= width || y >= height)
+        return;
 
-    float dist = distance(float3(x, 0, y), float3(customAreaX, 0, customAreaZ));
+    int index = x + y * width;
+    float dist = distance(float2(x, y), float2(customAreaX, customAreaZ));
 
     if (dist <= innerRadius)
     {
         customAreaData[index] = targetHeight;
     }
-    else if (dist >= innerRadius && dist <= outerRadius)
+    else if (dist > innerRadius && dist <= outerRadius)
     {
-        //We are inside interpolate zone
         float originalHeight = terrainHeightsData[index];
-
-        float avrgNeighhbourHeight = GetAvarageHeightAroundArea(x, y);
+        float avgNeighborHeight = GetAverageHeightAroundArea(x, y);
 
         float t = smoothstep(outerRadius, innerRadius, dist);
-        float heightDifference = lerp(avrgNeighhbourHeight, originalHeight, t);
-
+        float heightDifference = lerp(avgNeighborHeight, originalHeight, t);
         float blended = lerp(heightDifference, targetHeight, t);
 
         customAreaData[index] = blended;
     }
-    else customAreaData[index] = terrainHeightsData[index];
+    else
+    {
+        customAreaData[index] = terrainHeightsData[index];
+    }
 }
