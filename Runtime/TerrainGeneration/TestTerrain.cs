@@ -1,5 +1,6 @@
 ﻿using CodenameLib.ProceduralTerrain;
 using UnityEngine;
+using UnityEngine.Events;
 
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer), typeof(MeshCollider))]
 public class TestTerrain : MonoBehaviour
@@ -11,6 +12,7 @@ public class TestTerrain : MonoBehaviour
     private MeshFilter meshFilter;
     private MeshCollider meshCollider;
     public Transform viewer;
+    public static UnityEvent OnCreatingDone = new UnityEvent();
 
     public void Generate()
     {
@@ -31,6 +33,7 @@ public class TestTerrain : MonoBehaviour
 
         meshFilter.sharedMesh = r.mesh;
         meshCollider.sharedMesh = r.mesh;
+        OnCreatingDone?.Invoke();
 
         TerrainDrawType drawType = settings.drawType;
         if (drawType == TerrainDrawType.DrawColorMap && r.colorMap != null)
