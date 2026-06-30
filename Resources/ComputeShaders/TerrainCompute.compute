@@ -1,6 +1,7 @@
 #pragma kernel CSMain
 #pragma kernel SmoothingWholeTerrain
 #pragma kernel SmoothingCustomArea
+#pragma kernel Erode
 
 // Improved noise functions without integer boundary issues
 float hash(float2 p)
@@ -194,5 +195,132 @@ void SmoothingCustomArea(uint3 id : SV_DispatchThreadID)
     else
     {
         customAreaData[index] = terrainHeightsData[index];
+    }
+}
+
+// =====================================================================
+// Hydraulic erosion (droplet simulation, Sebastian Lague style)
+// Operates in-place on a flattened heightmap: index = x + y * mapSize.
+// One thread per droplet. Droplets are kept inside `borderSize` so the
+// erosion brush never samples out of bounds.
+// =====================================================================
+RWStructuredBuffer<float> ErosionMap;   // heightmap, size mapSize*mapSize
+StructuredBuffer<int> randomIndices;    // start cell per droplet
+StructuredBuffer<int> brushIndices;     // relative 1D offsets of the erosion brush
+StructuredBuffer<float> brushWeights;   // normalized brush weights (sum = 1)
+
+int numDroplets;
+int mapSize;
+int brushLength;
+int borderSize;
+int maxLifetime;
+float inertia;
+float sedimentCapacityFactor;
+float minSedimentCapacity;
+float depositSpeed;
+float erodeSpeed;
+float evaporateSpeed;
+float gravity;
+float startSpeed;
+float startWater;
+
+// Bilinear height + gradient at a (fractional) map position.
+// Returns (gradientX, gradientY, height).
+float3 HeightAndGradient(float posX, float posY)
+{
+    int coordX = (int) posX;
+    int coordY = (int) posY;
+    float x = posX - coordX;
+    float y = posY - coordY;
+
+    int nw = coordY * mapSize + coordX;
+    float hNW = ErosionMap[nw];
+    float hNE = ErosionMap[nw + 1];
+    float hSW = ErosionMap[nw + mapSize];
+    float hSE = ErosionMap[nw + mapSize + 1];
+
+    float gradientX = (hNE - hNW) * (1 - y) + (hSE - hSW) * y;
+    float gradientY = (hSW - hNW) * (1 - x) + (hSE - hNE) * x;
+    float height = hNW * (1 - x) * (1 - y) + hNE * x * (1 - y)
+                 + hSW * (1 - x) * y       + hSE * x * y;
+
+    return float3(gradientX, gradientY, height);
+}
+
+[numthreads(64, 1, 1)]
+void Erode(uint3 id : SV_DispatchThreadID)
+{
+    if ((int) id.x >= numDroplets)
+        return;
+
+    int index = randomIndices[id.x];
+    float posX = index % mapSize;
+    float posY = index / mapSize;
+
+    float dirX = 0;
+    float dirY = 0;
+    float speed = startSpeed;
+    float water = startWater;
+    float sediment = 0;
+
+    for (int lifetime = 0; lifetime < maxLifetime; lifetime++)
+    {
+        int nodeX = (int) posX;
+        int nodeY = (int) posY;
+        int dropletIndex = nodeY * mapSize + nodeX;
+        float cellOffsetX = posX - nodeX;
+        float cellOffsetY = posY - nodeY;
+
+        float3 hg = HeightAndGradient(posX, posY);
+
+        // Update direction with inertia, then move one cell.
+        dirX = dirX * inertia - hg.x * (1 - inertia);
+        dirY = dirY * inertia - hg.y * (1 - inertia);
+        float len = max(0.00001, sqrt(dirX * dirX + dirY * dirY));
+        dirX /= len;
+        dirY /= len;
+        posX += dirX;
+        posY += dirY;
+
+        // Stop if stationary or it left the safe region.
+        if ((dirX == 0 && dirY == 0) ||
+            posX < borderSize || posX > mapSize - borderSize ||
+            posY < borderSize || posY > mapSize - borderSize)
+            break;
+
+        float newHeight = HeightAndGradient(posX, posY).z;
+        float deltaHeight = newHeight - hg.z;
+
+        float sedimentCapacity = max(-deltaHeight * speed * water * sedimentCapacityFactor, minSedimentCapacity);
+
+        if (sediment > sedimentCapacity || deltaHeight > 0)
+        {
+            // Deposit (drop into a pit, or carrying too much): bilinear onto the 4 nodes.
+            float amountToDeposit = (deltaHeight > 0)
+                ? min(deltaHeight, sediment)
+                : (sediment - sedimentCapacity) * depositSpeed;
+            sediment -= amountToDeposit;
+
+            ErosionMap[dropletIndex]               += amountToDeposit * (1 - cellOffsetX) * (1 - cellOffsetY);
+            ErosionMap[dropletIndex + 1]           += amountToDeposit * cellOffsetX       * (1 - cellOffsetY);
+            ErosionMap[dropletIndex + mapSize]     += amountToDeposit * (1 - cellOffsetX) * cellOffsetY;
+            ErosionMap[dropletIndex + mapSize + 1] += amountToDeposit * cellOffsetX       * cellOffsetY;
+        }
+        else
+        {
+            // Erode across the brush, never digging below the cell's height.
+            float amountToErode = min((sedimentCapacity - sediment) * erodeSpeed, -deltaHeight);
+            for (int i = 0; i < brushLength; i++)
+            {
+                int erodeIndex = dropletIndex + brushIndices[i];
+                float weightedErode = amountToErode * brushWeights[i];
+                float delta = min(ErosionMap[erodeIndex], weightedErode);
+                ErosionMap[erodeIndex] -= delta;
+                sediment += delta;
+            }
+        }
+
+        speed = sqrt(max(0, speed * speed + deltaHeight * gravity));
+        water *= (1 - evaporateSpeed);
     }
 }

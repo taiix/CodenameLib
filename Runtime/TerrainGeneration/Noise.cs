@@ -5,22 +5,28 @@ namespace CodenameLib.ProceduralTerrain
     public static class Noise
     {
         private static ComputeShader _computeShader;
-
+        private static Material _terrainMaterial;
         //This is called once when the class is first accessed
         static Noise()
         {
             _computeShader = Resources.Load<ComputeShader>("ComputeShaders/TerrainCompute");
+            _terrainMaterial = Resources.Load<Material>("TerrainShaders/TerrainMaterial");
             if (_computeShader == null)
             {
                 Debug.LogError("Compute Shader not found!");
             }
+            if (_terrainMaterial == null)
+            {
+                Debug.LogError("Terrain Material not found!");
+            }
             Debug.Log("Compute Shader loaded successfully.");
+            Debug.Log("Terrain Shader loaded successfully.");
         }
 
-        
+
         public static float[,] GenerateNoiseMap(TerrainSettings settings)
         {
-            int size = TerrainSettings.mapChunkSize;
+            int size = settings.EffectiveResolution;
             float[,] noiseMap = new float[size, size];
 
             if (settings.scale <= 0f)
@@ -30,6 +36,8 @@ namespace CodenameLib.ProceduralTerrain
 
             int kernelHandle = computeShader.FindKernel("CSMain");
             ComputeBuffer noiseBuffer = new ComputeBuffer(size * size, sizeof(float));
+            ComputeBuffer smoothingData = new ComputeBuffer(size * size, sizeof(float));
+            ComputeBuffer terrainHeightsData = new ComputeBuffer(size * size, sizeof(float));
 
             computeShader.SetInt("width", size);
             computeShader.SetInt("height", size);
@@ -50,8 +58,8 @@ namespace CodenameLib.ProceduralTerrain
             noiseBuffer.GetData(noiseArray);
 
             noiseBuffer.Release();
-            Object.DestroyImmediate(computeShader);
-            
+
+
             float min = float.MaxValue;
             float max = float.MinValue;
             for (int y = 0; y < size; y++)
@@ -60,6 +68,8 @@ namespace CodenameLib.ProceduralTerrain
                 {
                     float v = noiseArray[y * size + x];
                     noiseMap[x, y] = v;
+
+
                     if (v < min) min = v;
                     if (v > max) max = v;
                 }
@@ -71,7 +81,7 @@ namespace CodenameLib.ProceduralTerrain
                 for (int y = 0; y < size; y++)
                 {
                     for (int x = 0; x < size; x++)
-                        noiseMap[x, y] = 0f; // or 0.5f if you prefer midpoint
+                        noiseMap[x, y] = 0f;
                 }
                 return noiseMap;
             }
@@ -85,7 +95,42 @@ namespace CodenameLib.ProceduralTerrain
                 }
             }
 
+            noiseMap = WholeTerrainSmoothing(computeShader, smoothingData, terrainHeightsData, size, size, noiseMap, settings.smoothStrength);
+
+            smoothingData.Release();
+            terrainHeightsData.Release();
+
+            Object.DestroyImmediate(computeShader);
+
             return noiseMap;
+        }
+
+        private static float[,] WholeTerrainSmoothing(ComputeShader computeShader, ComputeBuffer smoothingData, ComputeBuffer terrainHeightsData, int width, int height, float[,] noiseHeights, int smoothStrenght)
+        {
+            int kernelIndexSmoothing = computeShader.FindKernel("SmoothingWholeTerrain");
+
+            computeShader.SetBuffer(kernelIndexSmoothing, "smoothingData", smoothingData);
+
+            terrainHeightsData.SetData(noiseHeights);
+            computeShader.SetBuffer(kernelIndexSmoothing, "terrainHeightsData", terrainHeightsData);
+
+            computeShader.SetInt("smoothRadius", smoothStrenght);
+
+            computeShader.Dispatch(kernelIndexSmoothing, width / 8, height / 8, 1);
+
+            float[] smoothedHeightsData = new float[width * height];
+            smoothingData.GetData(smoothedHeightsData);
+
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int index = x + y * width;
+                    noiseHeights[x, y] = smoothedHeightsData[index];
+                }
+            }
+
+            return noiseHeights;
         }
 
         //Generates a noise map texture aka perlin noise material
@@ -105,9 +150,8 @@ namespace CodenameLib.ProceduralTerrain
                 }
             }
             texture.Apply();
-            Material material = new Material(Shader.Find("Unlit/Texture"));
-            material.mainTexture = texture;
-            return material;
+            _terrainMaterial.SetTexture("_HeightMap", texture);
+            return _terrainMaterial;
         }
 
         //Applies colors based on the terrain heights from noisemap

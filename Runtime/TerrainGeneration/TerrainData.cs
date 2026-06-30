@@ -22,6 +22,11 @@ namespace CodenameLib.ProceduralTerrain
 
         public const int mapChunkSize = 240;
 
+        [Range(1, 6)]
+        [Tooltip("Multiplies the base grid resolution (mapChunkSize) without changing world size. " +
+                 "1 = base, 2 = 4x vertices, 3 = 9x, etc. Cost scales with the square of this value.")]
+        public int detailMultiplier;
+
         public float size;
 
 
@@ -43,10 +48,17 @@ namespace CodenameLib.ProceduralTerrain
         public int interpolationNeighbors;
 
         [Space]
+        [Header("Erosion")]
+        public ErosionSettings erosion;
+
+        [Space]
         [Header("Terrain Types")]
         public TerrainType[] terrainTypes;
 
         public static int MapChunkSize => mapChunkSize;
+
+        // Actual samples-per-side used for the heightmap and mesh grid.
+        public int EffectiveResolution => mapChunkSize * Mathf.Max(1, detailMultiplier);
 
         public static TerrainSettings Default => new TerrainSettings
         {
@@ -59,6 +71,7 @@ namespace CodenameLib.ProceduralTerrain
             lacunarity = 2f,
             heightMultiplier = 10f,
             offset = Vector2.zero,
+            detailMultiplier = 1,
             size = 100f,
             decreasePercentage = 0.3f,
             edgeCurve = AnimationCurve.Linear(0, 0, 1, 1),
@@ -68,6 +81,8 @@ namespace CodenameLib.ProceduralTerrain
             outerRadius = 20f,
             targetHeight = 0.5f,
             interpolationNeighbors = 2,
+
+            erosion = ErosionSettings.Default,
 
             terrainTypes = new[]
             {
@@ -120,6 +135,54 @@ namespace CodenameLib.ProceduralTerrain
                 errorMessage = error
             };
         }
+    }
+
+    [System.Serializable]
+    public struct ErosionSettings
+    {
+        public bool enabled;
+        public int seed;
+
+        [Tooltip("Number of simulated rain droplets. ~50k-200k for a full pass.")]
+        public int iterations;
+
+        [Range(2, 8)]
+        [Tooltip("Radius of the erosion brush in cells. Larger = smoother, wider carving.")]
+        public int erosionRadius;
+
+        [Range(0f, 1f)]
+        [Tooltip("How much a droplet keeps its previous direction (0 = follows gradient exactly).")]
+        public float inertia;
+
+        public float sedimentCapacityFactor;
+        public float minSedimentCapacity;
+
+        [Range(0f, 1f)] public float depositSpeed;
+        [Range(0f, 1f)] public float erodeSpeed;
+        [Range(0f, 1f)] public float evaporateSpeed;
+
+        public float gravity;
+        public float startSpeed;
+        public float startWater;
+        public int maxDropletLifetime;
+
+        public static ErosionSettings Default => new ErosionSettings
+        {
+            enabled = true,
+            seed = 1,
+            iterations = 70000,
+            erosionRadius = 3,
+            inertia = 0.05f,
+            sedimentCapacityFactor = 4f,
+            minSedimentCapacity = 0.01f,
+            depositSpeed = 0.3f,
+            erodeSpeed = 0.3f,
+            evaporateSpeed = 0.01f,
+            gravity = 4f,
+            startSpeed = 1f,
+            startWater = 1f,
+            maxDropletLifetime = 30
+        };
     }
 
     [System.Serializable]

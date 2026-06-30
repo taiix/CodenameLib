@@ -14,6 +14,7 @@ public class TestTerrain : MonoBehaviour
 
     public void Generate()
     {
+
         MeshTerrainResult r = MeshTerrainGenerator.GenerateMeshTerrain(settings);
 
         if (!r.success)

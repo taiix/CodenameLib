@@ -24,7 +24,7 @@ namespace CodenameLib.ProceduralTerrain
         public static void Initialize(TerrainSettings settings, Transform parent = null)
         {
             _baseSettings    = settings; // struct copy
-            _mapResolution   = TerrainSettings.mapChunkSize;
+            _mapResolution   = settings.EffectiveResolution;
             _chunkWorldSize  = Mathf.Max(1f, settings.size);
             _parent          = parent;
 
