@@ -39,6 +39,7 @@ namespace CodenameLib.ProceduralTerrain
                 }
 
                 Mesh mesh = CreateMeshFromHeightmap(heightmap, settings);
+                CreateHeightMap(heightmap);
 
                 TerrainDrawType drawType = settings.drawType;
                 switch (drawType)
@@ -61,16 +62,19 @@ namespace CodenameLib.ProceduralTerrain
             }
         }
 
-        private static Texture2D CreateHeightMap(float size, float[,] heights)
+        private static Texture2D CreateHeightMap(float[,] heights)
         {
-            Texture2D heightmapTexture = new Texture2D((int)size, (int)size, TextureFormat.RFloat, false);
+            int height = heights.GetLength(0);
+            int width = heights.GetLength(1);
+
+            Texture2D heightmapTexture = new Texture2D(width, height, TextureFormat.RFloat, false);
 
             heightmapTexture.filterMode = FilterMode.Trilinear;
             heightmapTexture.wrapMode = TextureWrapMode.Repeat;
 
-            for (int y = 0; y < size; y++)
+            for (int y = 0; y < height; y++)
             {
-                for (int x = 0; x < size; x++)
+                for (int x = 0; x < width; x++)
                 {
                     float heightValue = (heights[y, x]);
                     heightmapTexture.SetPixel(x, y, new Color(heightValue, heightValue, heightValue));
@@ -144,7 +148,6 @@ namespace CodenameLib.ProceduralTerrain
             mesh.triangles = tris;
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
-            CreateHeightMap(size, heightmap);
             Debug.Log($"[TerrainGen] ✅ Mesh created. Vertices={verts.Length}, Tris={tris.Length / 3}");
             return mesh;
         }
