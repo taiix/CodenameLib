@@ -12,7 +12,7 @@ namespace CodenameLib.ProceduralTerrain
         {
             LoadComputeShader();
         }
-        
+
         //Load the compute shader
         private static void LoadComputeShader()
         {
@@ -23,7 +23,7 @@ namespace CodenameLib.ProceduralTerrain
             else
                 Debug.Log("[TerrainGen] ✅ Compute shader loaded successfully.");
         }
-        
+
         public static MeshTerrainResult GenerateMeshTerrain(TerrainSettings settings)
         {
             try
@@ -39,7 +39,7 @@ namespace CodenameLib.ProceduralTerrain
                 }
 
                 Mesh mesh = CreateMeshFromHeightmap(heightmap, settings);
-                
+
                 TerrainDrawType drawType = settings.drawType;
                 switch (drawType)
                 {
@@ -59,6 +59,32 @@ namespace CodenameLib.ProceduralTerrain
                 Debug.LogError($"[TerrainGen] ❌ Generation failed: {e}");
                 return MeshTerrainResult.Failure(e.Message);
             }
+        }
+
+        private static Texture2D CreateHeightMap(float size, float[,] heights)
+        {
+            Texture2D heightmapTexture = new Texture2D((int)size, (int)size, TextureFormat.RFloat, false);
+
+            heightmapTexture.filterMode = FilterMode.Trilinear;
+            heightmapTexture.wrapMode = TextureWrapMode.Repeat;
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float heightValue = (heights[y, x]);
+                    heightmapTexture.SetPixel(x, y, new Color(heightValue, heightValue, heightValue));
+                }
+            }
+
+            heightmapTexture.Apply();
+            _chunkTexture = heightmapTexture;
+            return _chunkTexture;
+        }
+
+        public static Texture2D GetHeightMapTexture()
+        {
+            return _chunkTexture;
         }
 
         //Create the actual mesh based on the heightmap from the compute shader
@@ -118,9 +144,11 @@ namespace CodenameLib.ProceduralTerrain
             mesh.triangles = tris;
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
-
+            CreateHeightMap(size, heightmap);
             Debug.Log($"[TerrainGen] ✅ Mesh created. Vertices={verts.Length}, Tris={tris.Length / 3}");
             return mesh;
         }
+
+
     }
 }
